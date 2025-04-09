@@ -226,6 +226,7 @@
   </div>
 </div>
 
+<script src="config.js"></script>
 <script>
   // List of valid industries
   const VALID_INDUSTRIES = [
@@ -255,105 +256,87 @@
     'Windshield repair pro', 'Yoga instructor'
   ];
 
-  const industrySelect = document.getElementById('industry');
-  VALID_INDUSTRIES.forEach((ind) => {
-    const opt = document.createElement('option');
-    opt.value = ind;
-    opt.textContent = ind;
-    industrySelect.appendChild(opt);
-  });
+  document.addEventListener('DOMContentLoaded', function() {
+    // Populate industry dropdown
+    const industrySelect = document.getElementById('industry');
+    VALID_INDUSTRIES.forEach(industry => {
+      const option = document.createElement('option');
+      option.value = industry;
+      option.textContent = industry;
+      industrySelect.appendChild(option);
+    });
 
-  // Grabbing references
-  const formEl         = document.getElementById('calculatorForm');
-  const loadingEl      = document.getElementById('loading');
-  const resultsEl      = document.getElementById('results');
-  const resultsActions = document.getElementById('resultsActions');
-  const errorEl        = document.getElementById('error');
-  const errorTextEl    = document.getElementById('errorText');
+    // Form submission
+    const form = document.getElementById('calculatorForm');
+    const loading = document.getElementById('loading');
+    const results = document.getElementById('results');
+    const resultsActions = document.getElementById('resultsActions');
+    const error = document.getElementById('error');
 
-  const calculateBtn   = document.getElementById('calculateBtn');
-  const goBackBtn      = document.getElementById('goBack');
-  const scheduleBtn    = document.getElementById('scheduleExpert');
+    form.addEventListener('submit', async function(e) {
+      e.preventDefault();
 
-  // Show results with fade-scale
-  function showResults() {
-    formEl.style.display = 'none';
-    calculateBtn.style.display = 'none';
-
-    resultsEl.style.display = 'block';
-    resultsActions.style.display = 'flex';
-
-    // Let MDL re-upgrade DOM (optional if needed)
-    componentHandler.upgradeDom();
-
-    setTimeout(() => {
-      resultsEl.classList.add('active');
-    }, 50);
-  }
-
-  // Hide results, show form
-  function hideResults() {
-    resultsEl.classList.remove('active');
-    setTimeout(() => {
-      resultsEl.style.display = 'none';
+      // Hide results and error, show loading
+      results.style.display = 'none';
       resultsActions.style.display = 'none';
-      formEl.style.display = 'flex';
-      calculateBtn.style.display = 'inline-block';
-    }, 300);
-  }
+      error.classList.remove('active');
+      loading.classList.add('active');
 
-  // Submit form
-  formEl.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    // Show spinner
-    loadingEl.classList.add('active');
-    // Hide error & results if repeated
-    errorEl.classList.remove('active');
-    resultsEl.classList.remove('active');
-    resultsEl.style.display = 'none';
-    resultsActions.style.display = 'none';
+      const formData = {
+        zipCode: document.getElementById('zipCode').value,
+        industry: document.getElementById('industry').value,
+        leadsPerMonth: parseInt(document.getElementById('leadsPerMonth').value)
+      };
 
-    try {
-      // Example fetch request:
-      const response = await fetch('http://localhost:3000/calculate-budget', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          zipCode: document.getElementById('zipCode').value,
-          industry: document.getElementById('industry').value,
-          leadsPerMonth: parseInt(document.getElementById('leadsPerMonth').value),
-        }),
-      });
-      const data = await response.json();
+      try {
+        const response = await fetch(`${config.apiUrl}/calculate-budget`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(formData)
+        });
 
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to calculate budget');
+        const data = await response.json();
+
+        // Hide loading
+        loading.classList.remove('active');
+
+        if (data.success) {
+          // Update results
+          document.getElementById('minBudget').textContent = data.budget.min;
+          document.getElementById('maxBudget').textContent = data.budget.max;
+          document.getElementById('estimatedLeads').textContent = data.leads.estimated;
+          document.getElementById('costPerLead').textContent = data.leads.costPerLead;
+
+          // Show results and actions
+          results.style.display = 'block';
+          resultsActions.style.display = 'flex';
+          setTimeout(() => results.classList.add('active'), 50);
+        } else {
+          // Show error
+          document.getElementById('errorText').textContent = data.error || 'An error occurred while calculating the budget.';
+          error.classList.add('active');
+        }
+      } catch (err) {
+        console.error('Error:', err);
+        loading.classList.remove('active');
+        document.getElementById('errorText').textContent = 'An error occurred while connecting to the server.';
+        error.classList.add('active');
       }
+    });
 
-      // Populate results
-      document.getElementById('minBudget').textContent      = data.budget.min;
-      document.getElementById('maxBudget').textContent      = data.budget.max;
-      document.getElementById('estimatedLeads').textContent = data.leads.estimated;
-      document.getElementById('costPerLead').textContent    = data.leads.costPerLead;
+    // Go back button
+    document.getElementById('goBack').addEventListener('click', function() {
+      results.classList.remove('active');
+      resultsActions.style.display = 'none';
+      setTimeout(() => results.style.display = 'none', 300);
+    });
 
-      // Show results
-      showResults();
-    } catch (err) {
-      // Show error text
-      errorTextEl.textContent = err.message;
-      errorEl.classList.add('active');
-    } finally {
-      // Hide spinner
-      loadingEl.classList.remove('active');
-    }
-  });
-
-  // Go back
-  goBackBtn.addEventListener('click', hideResults);
-
-  // "Schedule meeting with Expert" – just a placeholder
-  scheduleBtn.addEventListener('click', () => {
-    alert('Meeting scheduled with an expert!');
+    // Schedule expert button
+    document.getElementById('scheduleExpert').addEventListener('click', function() {
+      window.location.href = 'mailto:contact@example.com?subject=LSA Expert Consultation Request';
+    });
   });
 </script>
 </body>
