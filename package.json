@@ -4,13 +4,23 @@
   "description": "Local Services Ads Calculator API",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "dev": "nodemon server.js",
+    "install-browsers": "npx playwright install chromium"
   },
   "dependencies": {
     "@playwright/test": "^1.51.1",
     "cors": "^2.8.5",
     "express": "^4.21.2",
-    "playwright": "^1.51.1"
+    "playwright": "^1.51.1",
+    "winston": "^3.11.0",
+    "morgan": "^1.10.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   },
   "keywords": [],
   "author": "",

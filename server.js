@@ -1,7 +1,12 @@
 const express = require('express');
 const { chromium } = require('playwright');
 const cors = require('cors');
+const morgan = require('morgan');
+const logger = require('./logger');
 const app = express();
+
+// Enable HTTP request logging
+app.use(morgan('combined'));
 
 // Enable CORS for all routes
 app.use(cors({
@@ -45,6 +50,7 @@ let browserPromise = null;
 
 async function getBrowser() {
     if (!browserPromise) {
+        logger.info('Initializing new browser instance');
         browserPromise = chromium.launch({
             headless: true,
             args: ['--no-sandbox', '--disable-setuid-sandbox']
@@ -56,8 +62,15 @@ async function getBrowser() {
 app.post('/calculate-budget', async (req, res) => {
     const { zipCode, industry, leadsPerMonth } = req.body;
     
+    logger.info('Received budget calculation request', {
+        zipCode,
+        industry,
+        leadsPerMonth
+    });
+
     // Input validation
     if (!zipCode || !industry || !leadsPerMonth) {
+        logger.warn('Missing required parameters', { body: req.body });
         return res.status(400).json({
             success: false,
             error: 'Missing required parameters. Please provide zipCode, industry, and leadsPerMonth.'
@@ -65,6 +78,7 @@ app.post('/calculate-budget', async (req, res) => {
     }
 
     if (!VALID_INDUSTRIES.includes(industry)) {
+        logger.warn('Invalid industry provided', { industry });
         return res.status(400).json({
             success: false,
             error: 'Invalid industry. Please select from the provided list of industries.'
@@ -72,6 +86,7 @@ app.post('/calculate-budget', async (req, res) => {
     }
 
     if (leadsPerMonth < 1 || leadsPerMonth > 10000) {
+        logger.warn('Invalid leads per month value', { leadsPerMonth });
         return res.status(400).json({
             success: false,
             error: 'Leads per month must be between 1 and 10000.'
@@ -80,14 +95,17 @@ app.post('/calculate-budget', async (req, res) => {
 
     let browser;
     try {
-        console.log('Starting budget calculation for:', { zipCode, industry, leadsPerMonth });
+        logger.info('Starting budget calculation', {
+            zipCode,
+            industry,
+            leadsPerMonth
+        });
         
         browser = await getBrowser();
         const context = await browser.newContext();
         const page = await context.newPage();
 
-        // Navigate to the calculator page
-        console.log('Navigating to LSA calculator...');
+        logger.info('Navigating to LSA calculator');
         await page.goto('https://business.google.com/us/ad-solutions/local-service-ads/#:~:text=Calculate%20your-,budget,-Enter%20Postal%20code', {
             waitUntil: 'networkidle',
             timeout: 30000
@@ -97,7 +115,7 @@ app.post('/calculate-budget', async (req, res) => {
         await page.waitForTimeout(2000);
 
         // Fill ZIP code using exact XPath
-        console.log('Filling ZIP code:', zipCode);
+        logger.info('Filling ZIP code', { zipCode });
         const zipCodeXPath = '/html/body/main/div/section[4]/div/div[4]/div/div/div[1]/label[1]/input';
         await page.waitForSelector(`xpath=${zipCodeXPath}`, { state: 'visible', timeout: 2000 });
         const zipInput = await page.locator(`xpath=${zipCodeXPath}`);
@@ -105,7 +123,7 @@ app.post('/calculate-budget', async (req, res) => {
         await zipInput.press('Tab'); // Trigger any validation
 
         // Fill leads per month using exact XPath
-        console.log('Setting leads per month:', leadsPerMonth);
+        logger.info('Setting leads per month', { leadsPerMonth });
         const leadsXPath = '/html/body/main/div/section[4]/div/div[4]/div/div/div[1]/label[2]/input';
         await page.waitForSelector(`xpath=${leadsXPath}`, { state: 'visible', timeout: 2000 });
         const leadsInput = await page.locator(`xpath=${leadsXPath}`);
@@ -113,7 +131,7 @@ app.post('/calculate-budget', async (req, res) => {
         await leadsInput.press('Tab'); // Trigger any validation
 
         // Updated industry selection logic with click outside
-        console.log('Selecting industry:', industry);
+        logger.info('Selecting industry', { industry });
         const industryXPath = '//*[@id="industry-myselect"]';
         await page.waitForSelector(`xpath=${industryXPath}`, { state: 'visible', timeout: 2000 });
         const industrySelect = await page.locator(`xpath=${industryXPath}`);
@@ -131,20 +149,22 @@ app.post('/calculate-budget', async (req, res) => {
         await page.waitForTimeout(100);
 
         // Click estimate button and wait for results
-        console.log('Clicking estimate button...');
+        logger.info('Clicking estimate button');
         const estimateButton = await page.getByRole('button', { name: /estimate budget/i });
         await estimateButton.click();
 
         // Wait for results with more detailed logging
-        console.log('Waiting for results...');
+        logger.info('Waiting for results');
         try {
             // Take a screenshot before waiting for results
-            await page.screenshot({ path: 'before-results.png' });
+            logger.debug('Taking pre-results screenshot');
+            await page.screenshot({ path: '/tmp/before-results.png' });
             
             // Wait for any loading indicators to disappear
             await page.waitForTimeout(2000);
 
             // Extract budget information
+            logger.info('Extracting budget information');
             const budgetData = await page.evaluate(() => {
                 // Helper function to safely extract text content
                 const getTextContent = (selector) => {
@@ -168,7 +188,7 @@ app.post('/calculate-budget', async (req, res) => {
                     getTextContent('[data-testid="estimated-leads"]') ||
                     getTextContent('.lsa-calculator-module__leads');
 
-                console.log('Found values:', { minBudget, maxBudget, estimatedLeads });
+                logger.info('Found values', { minBudget, maxBudget, estimatedLeads });
 
                 if (!minBudget || !maxBudget || !estimatedLeads) {
                     throw new Error('Could not extract budget information');
@@ -181,8 +201,8 @@ app.post('/calculate-budget', async (req, res) => {
                 };
             });
 
-            // Take a screenshot after extraction
-            await page.screenshot({ path: 'after-results.png' });
+            logger.debug('Taking post-results screenshot');
+            await page.screenshot({ path: '/tmp/after-results.png' });
 
             // Calculate cost per lead
             const avgBudget = (budgetData.min + budgetData.max) / 2;
@@ -210,24 +230,27 @@ app.post('/calculate-budget', async (req, res) => {
             };
 
             await context.close();
-            console.log('Calculation completed successfully');
+            logger.info('Calculation completed successfully', { response });
             res.json(response);
 
         } catch (error) {
-            console.error('Error extracting results:', error);
+            logger.error('Error extracting results', {
+                error: error.message,
+                stack: error.stack
+            });
             
-            // Take a screenshot of the error state
-            await page.screenshot({ path: 'error-state.png' });
-            
-            // Get the page HTML for debugging
+            await page.screenshot({ path: '/tmp/error-state.png' });
             const html = await page.content();
-            console.error('Page HTML at error:', html);
+            logger.debug('Page HTML at error', { html });
             
             throw error;
         }
 
     } catch (error) {
-        console.error('Error occurred:', error);
+        logger.error('Error occurred during calculation', {
+            error: error.message,
+            stack: error.stack
+        });
         
         if (browser) {
             try {
@@ -236,7 +259,9 @@ app.post('/calculate-budget', async (req, res) => {
                 await page.screenshot({ path: '/tmp/error-screenshot.png' });
                 await context.close();
             } catch (e) {
-                console.error('Failed to take error screenshot:', e);
+                logger.error('Failed to take error screenshot', {
+                    error: e.message
+                });
             }
         }
 
@@ -250,6 +275,7 @@ app.post('/calculate-budget', async (req, res) => {
 
 // Health check endpoint
 app.get('/health', (req, res) => {
+    logger.info('Health check requested');
     res.json({ 
         status: 'ok',
         timestamp: new Date().toISOString()
@@ -263,7 +289,7 @@ module.exports = app;
 if (require.main === module) {
     const port = process.env.PORT || 3000;
     app.listen(port, () => {
-        console.log(`Server running on port ${port}`);
-        console.log(`Health check available at http://localhost:${port}/health`);
+        logger.info(`Server running on port ${port}`);
+        logger.info(`Health check available at http://localhost:${port}/health`);
     });
 }
