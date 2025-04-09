@@ -5,7 +5,7 @@
       "src": "server.js",
       "use": "@vercel/node",
       "config": {
-        "installCommand": "npm install && npx playwright install chromium"
+        "installCommand": "npm install -g playwright && npm install && npx playwright install chromium --with-deps"
       }
     }
   ],
