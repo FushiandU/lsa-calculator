@@ -11,6 +11,9 @@
   <!-- MDL (Material Design Lite) -->
   <link rel="stylesheet" href="https://code.getmdl.io/1.3.0/material.min.css" />
   <script defer src="https://code.getmdl.io/1.3.0/material.min.js"></script>
+  
+  <!-- Config file -->
+  <script src="/config.js"></script>
 
   <style>
     /* Basic page alignment & spacing */
@@ -226,8 +229,16 @@
   </div>
 </div>
 
-<script src="config.js"></script>
 <script>
+  // Fallback configuration in case config.js fails to load
+  if (typeof config === 'undefined') {
+    const config = {
+      apiUrl: window.location.origin // Use the current domain as API URL
+    };
+    window.config = config;
+    console.warn('Using fallback config:', config);
+  }
+  
   // List of valid industries
   const VALID_INDUSTRIES = [
     'Acupuncturist', 'Allergist', 'Animal shelter', 'Appliance repair', 'Architect',
