@@ -4,6 +4,7 @@ const cors = require('cors');
 const morgan = require('morgan');
 const logger = require('./logger');
 const path = require('path');
+const fs = require('fs');
 const app = express();
 
 // Enable HTTP request logging
@@ -18,6 +19,32 @@ app.use(cors({
 
 // Serve static files from the root directory
 app.use(express.static(path.join(__dirname)));
+
+// Explicit route for the root URL
+app.get('/', (req, res) => {
+    const filePath = path.join(__dirname, 'index.html');
+    fs.readFile(filePath, 'utf8', (err, data) => {
+        if (err) {
+            logger.error('Error reading index.html', { error: err.message });
+            return res.status(500).send('Error reading file');
+        }
+        res.setHeader('Content-Type', 'text/html');
+        res.send(data);
+    });
+});
+
+// Explicit route for test.html
+app.get('/test', (req, res) => {
+    const filePath = path.join(__dirname, 'test.html');
+    fs.readFile(filePath, 'utf8', (err, data) => {
+        if (err) {
+            logger.error('Error reading test.html', { error: err.message });
+            return res.status(500).send('Error reading file');
+        }
+        res.setHeader('Content-Type', 'text/html');
+        res.send(data);
+    });
+});
 
 app.use(express.json());
 

@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LSA Calculator API</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .container {
+            background-color: #f9f9f9;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            border-bottom: 2px solid #eee;
+            padding-bottom: 10px;
+        }
+        .btn {
+            display: inline-block;
+            background: #4285f4;
+            color: white;
+            padding: 10px 20px;
+            text-decoration: none;
+            border-radius: 4px;
+            margin-top: 20px;
+        }
+        .btn:hover {
+            background: #3367d6;
+        }
+        code {
+            background: #eee;
+            padding: 2px 5px;
+            border-radius: 3px;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>LSA Calculator API</h1>
+        <p>Welcome to the Local Services Ads Calculator API. This service helps estimate advertising budgets for various industries using Google's LSA platform.</p>
+        
+        <h2>Available Endpoints</h2>
+        <ul>
+            <li><code>/health</code> - Check API status</li>
+            <li><code>/calculate-budget</code> - Calculate LSA budget (available in local environment only)</li>
+            <li><code>/test</code> - Access the calculator interface</li>
+        </ul>
+        
+        <p><strong>Note:</strong> The full calculation feature requires a server environment with browser capabilities and is not available in the serverless deployment.</p>
+        
+        <a href="/test" class="btn">Try the Calculator UI</a>
+    </div>
+</body>
+</html> 
