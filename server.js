@@ -2,9 +2,14 @@ const express = require('express');
 const { chromium } = require('playwright');
 const cors = require('cors');
 const app = express();
-const port = process.env.PORT || 3000;
 
-app.use(cors());
+// Enable CORS for all routes
+app.use(cors({
+    origin: '*',
+    methods: ['GET', 'POST'],
+    allowedHeaders: ['Content-Type']
+}));
+
 app.use(express.json());
 
 // List of valid industries from Google LSA
@@ -35,6 +40,19 @@ const VALID_INDUSTRIES = [
     'Windshield repair pro', 'Yoga instructor'
 ];
 
+// Initialize browser instance outside request handler
+let browserPromise = null;
+
+async function getBrowser() {
+    if (!browserPromise) {
+        browserPromise = chromium.launch({
+            headless: true,
+            args: ['--no-sandbox', '--disable-setuid-sandbox']
+        });
+    }
+    return browserPromise;
+}
+
 app.post('/calculate-budget', async (req, res) => {
     const { zipCode, industry, leadsPerMonth } = req.body;
     
@@ -64,10 +82,7 @@ app.post('/calculate-budget', async (req, res) => {
     try {
         console.log('Starting budget calculation for:', { zipCode, industry, leadsPerMonth });
         
-        browser = await chromium.launch({
-            headless: true // Run in headless mode for production
-        });
-
+        browser = await getBrowser();
         const context = await browser.newContext();
         const page = await context.newPage();
 
@@ -194,7 +209,7 @@ app.post('/calculate-budget', async (req, res) => {
                 industry
             };
 
-            await browser.close();
+            await context.close();
             console.log('Calculation completed successfully');
             res.json(response);
 
@@ -216,10 +231,10 @@ app.post('/calculate-budget', async (req, res) => {
         
         if (browser) {
             try {
-                // Take error screenshot
-                const page = await browser.newPage();
-                await page.screenshot({ path: 'error-screenshot.png' });
-                await browser.close();
+                const context = await browser.newContext();
+                const page = await context.newPage();
+                await page.screenshot({ path: '/tmp/error-screenshot.png' });
+                await context.close();
             } catch (e) {
                 console.error('Failed to take error screenshot:', e);
             }
@@ -241,7 +256,14 @@ app.get('/health', (req, res) => {
     });
 });
 
-app.listen(port, () => {
-    console.log(`Server running on port ${port}`);
-    console.log(`Health check available at http://localhost:${port}/health`);
-});
+// Export the Express app for serverless deployment
+module.exports = app;
+
+// Only listen if running directly (not in serverless)
+if (require.main === module) {
+    const port = process.env.PORT || 3000;
+    app.listen(port, () => {
+        console.log(`Server running on port ${port}`);
+        console.log(`Health check available at http://localhost:${port}/health`);
+    });
+}
