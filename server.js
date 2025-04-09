@@ -3,6 +3,7 @@ const { chromium } = require('playwright');
 const cors = require('cors');
 const morgan = require('morgan');
 const logger = require('./logger');
+const path = require('path');
 const app = express();
 
 // Enable HTTP request logging
@@ -14,6 +15,9 @@ app.use(cors({
     methods: ['GET', 'POST'],
     allowedHeaders: ['Content-Type']
 }));
+
+// Serve static files from the root directory
+app.use(express.static(path.join(__dirname)));
 
 app.use(express.json());
 
