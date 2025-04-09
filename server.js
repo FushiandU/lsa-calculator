@@ -1,5 +1,5 @@
 const express = require('express');
-const { chromium } = require('playwright-core');
+const { chromium } = require('playwright');
 const cors = require('cors');
 const morgan = require('morgan');
 const logger = require('./logger');

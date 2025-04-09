@@ -3,7 +3,10 @@
   "builds": [
     {
       "src": "server.js",
-      "use": "@vercel/node"
+      "use": "@vercel/node",
+      "config": {
+        "installCommand": "npm install && npx playwright install chromium"
+      }
     }
   ],
   "routes": [
@@ -13,6 +16,6 @@
     }
   ],
   "env": {
-    "PLAYWRIGHT_BROWSERS_PATH": "0"
+    "PLAYWRIGHT_BROWSERS_PATH": "/tmp"
   }
 } 
