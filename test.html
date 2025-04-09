@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>LSA Budget Calculator - MDL Style</title>
+  
+  <!-- Roboto font + Material Icons -->
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons" />
+  
+  <!-- MDL (Material Design Lite) -->
+  <link rel="stylesheet" href="https://code.getmdl.io/1.3.0/material.min.css" />
+  <script defer src="https://code.getmdl.io/1.3.0/material.min.js"></script>
+
+  <style>
+    /* Basic page alignment & spacing */
+    body {
+      font-family: 'Roboto', sans-serif;
+      margin: 0;
+      background-color: #f5f5f5;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+    }
+    /* Card container */
+    .demo-card {
+      width: 100%;
+      max-width: 480px;
+      margin: 16px;
+    }
+
+    /* Fade + scale transitions */
+    .fade-scale {
+      transition: transform 0.3s ease, opacity 0.3s ease;
+      transform: scale(0.95);
+      opacity: 0;
+    }
+    .fade-scale.active {
+      transform: scale(1);
+      opacity: 1;
+    }
+
+    /* Loading spinner hidden by default */
+    .loading {
+      display: none;
+      align-items: center;
+      gap: 0.75rem;
+      justify-content: center;
+    }
+    .loading.active {
+      display: flex;
+    }
+
+    /* Basic spacing for results area */
+    #results .mdl-card__supporting-text {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    /* Keep error message hidden initially */
+    #error.mdl-card__supporting-text {
+      display: none;
+      padding-top: 0;
+    }
+    #error.mdl-card__supporting-text.active {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+
+<!-- Main Card -->
+<div class="mdl-card mdl-shadow--2dp">
+  <!-- Title -->
+  <div class="mdl-card__title" style="flex-direction: column; align-items: center;">
+    <h2 class="mdl-card__title-text" style="font-size:1.5rem;">LSA Budget Calculator</h2>
+    <p style="margin-top:8px; font-size:0.9rem; color: #666;">
+      Estimate your Google Local Services Ads budget
+    </p>
+  </div>
+
+  <!-- FORM SECTION -->
+  <form
+    id="calculatorForm"
+    class="mdl-card__supporting-text"
+    style="display: flex; flex-direction: column; gap: 1rem;"
+  >
+    <!-- ZIP Code -->
+    <div class="mdl-textfield mdl-js-textfield mdl-textfield--floating-label">
+      <input
+        class="mdl-textfield__input"
+        type="text"
+        id="zipCode"
+        name="zipCode"
+        required
+      />
+      <label class="mdl-textfield__label" for="zipCode">
+        ZIP Code
+      </label>
+    </div>
+
+    <!-- Industry -->
+    <div class="mdl-textfield mdl-js-textfield mdl-textfield--floating-label">
+      <select
+        class="mdl-textfield__input"
+        id="industry"
+        name="industry"
+        required
+      >
+        <option value="" disabled selected></option>
+      </select>
+      <label class="mdl-textfield__label" for="industry">
+        Select your industry
+      </label>
+    </div>
+
+    <!-- Leads per Month -->
+    <div class="mdl-textfield mdl-js-textfield mdl-textfield--floating-label">
+      <input
+        class="mdl-textfield__input"
+        type="number"
+        id="leadsPerMonth"
+        name="leadsPerMonth"
+        required
+        min="1"
+        max="10000"
+      />
+      <label class="mdl-textfield__label" for="leadsPerMonth">
+        How many leads per month?
+      </label>
+    </div>
+  </form>
+
+  <!-- Action Button (for the form) -->
+  <div class="mdl-card__actions" style="text-align:center;">
+    <button
+      id="calculateBtn"
+      form="calculatorForm"
+      class="mdl-button mdl-js-button mdl-button--raised mdl-button--colored"
+      style="width:100%; margin:0 auto;"
+    >
+      Calculate Budget
+    </button>
+  </div>
+
+  <!-- LOADING SPINNER -->
+  <div
+    id="loading"
+    class="loading mdl-card__supporting-text"
+  >
+    <!-- MDL Spinner -->
+    <div class="mdl-spinner mdl-js-spinner is-active"></div>
+    <span>Analyzing Local Services Ads...</span>
+  </div>
+
+  <!-- RESULTS SECTION -->
+  <div
+    id="results"
+    class="mdl-card__supporting-text fade-scale"
+    style="display: none;"
+  >
+    <h3 style="margin:0 0 8px; font-size:1.25rem;">
+      Estimated Budget
+    </h3>
+    <!-- Budget Range -->
+    <div>
+      <p style="margin:0; font-weight: 500;">Monthly Budget Range</p>
+      <p style="margin:4px 0 0;">
+        $<span id="minBudget">0</span> – $<span id="maxBudget">0</span>
+      </p>
+    </div>
+
+    <!-- Estimated Leads -->
+    <div>
+      <p style="margin:0; font-weight: 500;">Estimated Leads</p>
+      <p style="margin:4px 0 0;">
+        <span id="estimatedLeads">0</span> leads
+      </p>
+    </div>
+
+    <!-- Cost per Lead -->
+    <div>
+      <p style="margin:0; font-weight: 500;">Cost per Lead</p>
+      <p style="margin:4px 0 0;">
+        $<span id="costPerLead">0</span>
+      </p>
+    </div>
+  </div>
+
+  <!-- RESULTS ACTIONS -->
+  <div
+    class="mdl-card__actions"
+    id="resultsActions"
+    style="display:none; flex-direction: column; gap: 0.5rem;"
+  >
+    <button
+      id="scheduleExpert"
+      class="mdl-button mdl-js-button mdl-button--raised mdl-button--accent"
+      style="width:100%;"
+    >
+      Schedule meeting with Expert
+    </button>
+    <button
+      id="goBack"
+      class="mdl-button mdl-js-button mdl-button--raised"
+      style="width:100%;"
+    >
+      Go Back
+    </button>
+  </div>
+
+  <!-- ERROR MESSAGE -->
+  <div
+    id="error"
+    class="mdl-card__supporting-text"
+    style="color:#2f3fd3; margin-top:-8px;"
+  >
+    <div class="mdl-color-text--red-800" style="display:flex; align-items:center; gap:8px;">
+      <i class="material-icons">error</i>
+      <span id="errorText" style="font-size:0.9rem;">
+        An error occurred.
+      </span>
+    </div>
+  </div>
+</div>
+
+<script>
+  // List of valid industries
+  const VALID_INDUSTRIES = [
+    'Acupuncturist', 'Allergist', 'Animal shelter', 'Appliance repair', 'Architect',
+    'Audiologist', 'Auto body shop', 'Auto repair shop', 'Bankruptcy lawyer', 'Barber shop',
+    'Beauty school', 'Business lawyer', 'Car repair', 'Car wash and detailing', 'Carpenter',
+    'Carpet cleaning', 'Cellphone and laptop repair', 'Child care', 'Chiropractor', 'Contract lawyer',
+    'Countertop pro', 'Criminal lawyer', 'Dance instructor', 'Dentist', 'Dermatologist',
+    'Dietitian', 'Disability lawyer', 'Drain expert', 'Driving instructor', 'Dui lawyer',
+    'Electrician', 'Estate lawyer', 'Event planner', 'Family lawyer', 'Fencing pro',
+    'Financial planner', 'First aid trainer', 'Flooring pro', 'Foundation pro', 'Funeral home',
+    'Garage door pro', 'General contractor', 'Hair removal', 'Hair salon', 'Handyman',
+    'Home inspector', 'Home insulation', 'Home security', 'Home theater', 'House cleaner',
+    'HVAC', 'Immigration lawyer', 'Insurance agency', 'Interior designer', 'Ip lawyer',
+    'Junk removal', 'Labor lawyer', 'Landscaper', 'Language instructor', 'Lawn care',
+    'Lawyer', 'Litigation Lawyer', 'Locksmith', 'Malpractice lawyer', 'Massage school',
+    'Massage therapist', 'Medical spa', 'Mover', 'Nail salon', 'Occupational therapist',
+    'Ophthalmologist', 'Optometrist', 'Orthodontist', 'Orthopedic surgeon', 'Painter',
+    'Personal injury lawyer', 'Personal trainer', 'Pest control', 'Pet adoption', 'Pet boarding',
+    'Pet grooming', 'Pet trainer', 'Photographer', 'Physiotherapist', 'Piercing studio',
+    'Plastic surgeon', 'Plumber', 'Podiatrist', 'Pool cleaner', 'Pool contractor',
+    'Preschool', 'Primary Care', 'Real estate agent', 'Real estate lawyer', 'Roofer',
+    'Sewage pro', 'Siding pro', 'Snow removal', 'Solar energy contractor', 'Storage',
+    'Tattoo studio', 'Tax lawyer', 'Tax specialist', 'Tire shop', 'Towing',
+    'Towing pro', 'Traffic lawyer', 'Tree service', 'Tutor', 'Veterinarian',
+    'Videographer', 'Water damage', 'Weight loss service', 'Window cleaner', 'Window repair',
+    'Windshield repair pro', 'Yoga instructor'
+  ];
+
+  const industrySelect = document.getElementById('industry');
+  VALID_INDUSTRIES.forEach((ind) => {
+    const opt = document.createElement('option');
+    opt.value = ind;
+    opt.textContent = ind;
+    industrySelect.appendChild(opt);
+  });
+
+  // Grabbing references
+  const formEl         = document.getElementById('calculatorForm');
+  const loadingEl      = document.getElementById('loading');
+  const resultsEl      = document.getElementById('results');
+  const resultsActions = document.getElementById('resultsActions');
+  const errorEl        = document.getElementById('error');
+  const errorTextEl    = document.getElementById('errorText');
+
+  const calculateBtn   = document.getElementById('calculateBtn');
+  const goBackBtn      = document.getElementById('goBack');
+  const scheduleBtn    = document.getElementById('scheduleExpert');
+
+  // Show results with fade-scale
+  function showResults() {
+    formEl.style.display = 'none';
+    calculateBtn.style.display = 'none';
+
+    resultsEl.style.display = 'block';
+    resultsActions.style.display = 'flex';
+
+    // Let MDL re-upgrade DOM (optional if needed)
+    componentHandler.upgradeDom();
+
+    setTimeout(() => {
+      resultsEl.classList.add('active');
+    }, 50);
+  }
+
+  // Hide results, show form
+  function hideResults() {
+    resultsEl.classList.remove('active');
+    setTimeout(() => {
+      resultsEl.style.display = 'none';
+      resultsActions.style.display = 'none';
+      formEl.style.display = 'flex';
+      calculateBtn.style.display = 'inline-block';
+    }, 300);
+  }
+
+  // Submit form
+  formEl.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    // Show spinner
+    loadingEl.classList.add('active');
+    // Hide error & results if repeated
+    errorEl.classList.remove('active');
+    resultsEl.classList.remove('active');
+    resultsEl.style.display = 'none';
+    resultsActions.style.display = 'none';
+
+    try {
+      // Example fetch request:
+      const response = await fetch('http://localhost:3000/calculate-budget', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          zipCode: document.getElementById('zipCode').value,
+          industry: document.getElementById('industry').value,
+          leadsPerMonth: parseInt(document.getElementById('leadsPerMonth').value),
+        }),
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to calculate budget');
+      }
+
+      // Populate results
+      document.getElementById('minBudget').textContent      = data.budget.min;
+      document.getElementById('maxBudget').textContent      = data.budget.max;
+      document.getElementById('estimatedLeads').textContent = data.leads.estimated;
+      document.getElementById('costPerLead').textContent    = data.leads.costPerLead;
+
+      // Show results
+      showResults();
+    } catch (err) {
+      // Show error text
+      errorTextEl.textContent = err.message;
+      errorEl.classList.add('active');
+    } finally {
+      // Hide spinner
+      loadingEl.classList.remove('active');
+    }
+  });
+
+  // Go back
+  goBackBtn.addEventListener('click', hideResults);
+
+  // "Schedule meeting with Expert" – just a placeholder
+  scheduleBtn.addEventListener('click', () => {
+    alert('Meeting scheduled with an expert!');
+  });
+</script>
+</body>
+</html>
