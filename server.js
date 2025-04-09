@@ -1,5 +1,5 @@
 const express = require('express');
-const { chromium } = require('playwright');
+const { chromium } = require('playwright-core');
 const cors = require('cors');
 const morgan = require('morgan');
 const logger = require('./logger');
@@ -53,11 +53,41 @@ async function getBrowser() {
         logger.info('Initializing new browser instance');
         browserPromise = chromium.launch({
             headless: true,
-            args: ['--no-sandbox', '--disable-setuid-sandbox']
+            args: [
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-gpu',
+                '--no-first-run',
+                '--no-zygote',
+                '--single-process',
+                '--disable-extensions'
+            ]
+        }).catch(err => {
+            logger.error('Failed to launch browser', { error: err.message });
+            browserPromise = null;
+            throw err;
         });
     }
     return browserPromise;
 }
+
+// Cleanup function for browser
+async function cleanup() {
+    if (browserPromise) {
+        try {
+            const browser = await browserPromise;
+            await browser.close();
+        } catch (e) {
+            logger.error('Error closing browser', { error: e.message });
+        }
+        browserPromise = null;
+    }
+}
+
+// Handle cleanup on process termination
+process.on('SIGTERM', cleanup);
+process.on('SIGINT', cleanup);
 
 app.post('/calculate-budget', async (req, res) => {
     const { zipCode, industry, leadsPerMonth } = req.body;
@@ -94,155 +124,160 @@ app.post('/calculate-budget', async (req, res) => {
     }
 
     let browser;
+    let context;
+    let page;
+
     try {
-        logger.info('Starting budget calculation', {
-            zipCode,
-            industry,
-            leadsPerMonth
-        });
-        
-        browser = await getBrowser();
-        const context = await browser.newContext();
-        const page = await context.newPage();
+        // Set a timeout for the entire operation
+        const timeout = setTimeout(() => {
+            throw new Error('Operation timed out after 9 seconds');
+        }, 9000); // 9 seconds to stay within Vercel's 10s limit
 
-        logger.info('Navigating to LSA calculator');
-        await page.goto('https://business.google.com/us/ad-solutions/local-service-ads/#:~:text=Calculate%20your-,budget,-Enter%20Postal%20code', {
-            waitUntil: 'networkidle',
-            timeout: 30000
-        });
-
-        // Wait for the page to load
-        await page.waitForTimeout(2000);
-
-        // Fill ZIP code using exact XPath
-        logger.info('Filling ZIP code', { zipCode });
-        const zipCodeXPath = '/html/body/main/div/section[4]/div/div[4]/div/div/div[1]/label[1]/input';
-        await page.waitForSelector(`xpath=${zipCodeXPath}`, { state: 'visible', timeout: 2000 });
-        const zipInput = await page.locator(`xpath=${zipCodeXPath}`);
-        await zipInput.fill(zipCode);
-        await zipInput.press('Tab'); // Trigger any validation
-
-        // Fill leads per month using exact XPath
-        logger.info('Setting leads per month', { leadsPerMonth });
-        const leadsXPath = '/html/body/main/div/section[4]/div/div[4]/div/div/div[1]/label[2]/input';
-        await page.waitForSelector(`xpath=${leadsXPath}`, { state: 'visible', timeout: 2000 });
-        const leadsInput = await page.locator(`xpath=${leadsXPath}`);
-        await leadsInput.fill(leadsPerMonth.toString());
-        await leadsInput.press('Tab'); // Trigger any validation
-
-        // Updated industry selection logic with click outside
-        logger.info('Selecting industry', { industry });
-        const industryXPath = '//*[@id="industry-myselect"]';
-        await page.waitForSelector(`xpath=${industryXPath}`, { state: 'visible', timeout: 2000 });
-        const industrySelect = await page.locator(`xpath=${industryXPath}`);
-        await industrySelect.click();
-        await page.waitForTimeout(500);
-        
-        // Type the industry name
-        await page.keyboard.type(industry);
-        await page.waitForTimeout(500);
-        await page.keyboard.press('Enter');
-        await page.waitForTimeout(500);
-        
-        // Click outside the dropdown to close it
-        await page.mouse.click(0, 0); // Click at the top-left corner
-        await page.waitForTimeout(100);
-
-        // Click estimate button and wait for results
-        logger.info('Clicking estimate button');
-        const estimateButton = await page.getByRole('button', { name: /estimate budget/i });
-        await estimateButton.click();
-
-        // Wait for results with more detailed logging
-        logger.info('Waiting for results');
         try {
-            // Take a screenshot before waiting for results
-            logger.debug('Taking pre-results screenshot');
-            await page.screenshot({ path: '/tmp/before-results.png' });
+            logger.info('Starting budget calculation', {
+                zipCode,
+                industry,
+                leadsPerMonth
+            });
             
-            // Wait for any loading indicators to disappear
+            browser = await getBrowser();
+            context = await browser.newContext({
+                userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            });
+            page = await context.newPage();
+
+            // Set shorter timeouts for page operations
+            page.setDefaultTimeout(5000);
+            page.setDefaultNavigationTimeout(5000);
+
+            logger.info('Navigating to LSA calculator');
+            await page.goto('https://business.google.com/us/ad-solutions/local-service-ads/#:~:text=Calculate%20your-,budget,-Enter%20Postal%20code', {
+                waitUntil: 'networkidle',
+                timeout: 5000
+            });
+
+            // Wait for the page to load
             await page.waitForTimeout(2000);
 
-            // Extract budget information
-            logger.info('Extracting budget information');
-            const budgetData = await page.evaluate(() => {
-                // Helper function to safely extract text content
-                const getTextContent = (selector) => {
-                    const element = document.querySelector(selector);
-                    return element ? element.textContent.trim() : null;
-                };
+            // Fill ZIP code using exact XPath
+            logger.info('Filling ZIP code', { zipCode });
+            const zipCodeXPath = '/html/body/main/div/section[4]/div/div[4]/div/div/div[1]/label[1]/input';
+            await page.waitForSelector(`xpath=${zipCodeXPath}`, { state: 'visible', timeout: 2000 });
+            const zipInput = await page.locator(`xpath=${zipCodeXPath}`);
+            await zipInput.fill(zipCode);
+            await zipInput.press('Tab'); // Trigger any validation
 
-                // Try multiple possible selectors
-                const minBudget = 
-                    getTextContent('.min') || 
-                    getTextContent('[data-testid="min-budget"]') ||
-                    getTextContent('.lsa-calculator-module__min');
+            // Fill leads per month using exact XPath
+            logger.info('Setting leads per month', { leadsPerMonth });
+            const leadsXPath = '/html/body/main/div/section[4]/div/div[4]/div/div/div[1]/label[2]/input';
+            await page.waitForSelector(`xpath=${leadsXPath}`, { state: 'visible', timeout: 2000 });
+            const leadsInput = await page.locator(`xpath=${leadsXPath}`);
+            await leadsInput.fill(leadsPerMonth.toString());
+            await leadsInput.press('Tab'); // Trigger any validation
+
+            // Updated industry selection logic with click outside
+            logger.info('Selecting industry', { industry });
+            const industryXPath = '//*[@id="industry-myselect"]';
+            await page.waitForSelector(`xpath=${industryXPath}`, { state: 'visible', timeout: 2000 });
+            const industrySelect = await page.locator(`xpath=${industryXPath}`);
+            await industrySelect.click();
+            await page.waitForTimeout(500);
+            
+            // Type the industry name
+            await page.keyboard.type(industry);
+            await page.waitForTimeout(500);
+            await page.keyboard.press('Enter');
+            await page.waitForTimeout(500);
+            
+            // Click outside the dropdown to close it
+            await page.mouse.click(0, 0); // Click at the top-left corner
+            await page.waitForTimeout(100);
+
+            // Click estimate button and wait for results
+            logger.info('Clicking estimate button');
+            const estimateButton = await page.getByRole('button', { name: /estimate budget/i });
+            await estimateButton.click();
+
+            // Wait for results with more detailed logging
+            logger.info('Waiting for results');
+            try {
+                // Extract budget information
+                logger.info('Extracting budget information');
+                const budgetData = await page.evaluate(() => {
+                    // Helper function to safely extract text content
+                    const getTextContent = (selector) => {
+                        const element = document.querySelector(selector);
+                        return element ? element.textContent.trim() : null;
+                    };
+
+                    // Try multiple possible selectors
+                    const minBudget = 
+                        getTextContent('.min') || 
+                        getTextContent('[data-testid="min-budget"]') ||
+                        getTextContent('.lsa-calculator-module__min');
+                    
+                    const maxBudget = 
+                        getTextContent('.max') || 
+                        getTextContent('[data-testid="max-budget"]') ||
+                        getTextContent('.lsa-calculator-module__max');
+                    
+                    const estimatedLeads = 
+                        getTextContent('.budget') || 
+                        getTextContent('[data-testid="estimated-leads"]') ||
+                        getTextContent('.lsa-calculator-module__leads');
+
+                    logger.info('Found values', { minBudget, maxBudget, estimatedLeads });
+
+                    if (!minBudget || !maxBudget || !estimatedLeads) {
+                        throw new Error('Could not extract budget information');
+                    }
+
+                    return {
+                        min: parseInt(minBudget.replace(/[^0-9]/g, '')),
+                        max: parseInt(maxBudget.replace(/[^0-9]/g, '')),
+                        leads: parseInt(estimatedLeads.match(/\d+/)[0])
+                    };
+                });
+
+                // Calculate cost per lead
+                const avgBudget = (budgetData.min + budgetData.max) / 2;
+                const costPerLead = Math.round(avgBudget / budgetData.leads);
+
+                clearTimeout(timeout);
+                await context.close();
                 
-                const maxBudget = 
-                    getTextContent('.max') || 
-                    getTextContent('[data-testid="max-budget"]') ||
-                    getTextContent('.lsa-calculator-module__max');
+                // Return success response
+                res.json({
+                    success: true,
+                    budget: {
+                        min: budgetData.min,
+                        max: budgetData.max,
+                        currency: 'USD',
+                        frequency: 'monthly'
+                    },
+                    leads: {
+                        requested: leadsPerMonth,
+                        estimated: budgetData.leads,
+                        costPerLead
+                    },
+                    location: {
+                        zipCode,
+                        available: true
+                    },
+                    industry
+                });
+
+            } catch (error) {
+                logger.error('Error extracting results', {
+                    error: error.message,
+                    stack: error.stack
+                });
                 
-                const estimatedLeads = 
-                    getTextContent('.budget') || 
-                    getTextContent('[data-testid="estimated-leads"]') ||
-                    getTextContent('.lsa-calculator-module__leads');
-
-                logger.info('Found values', { minBudget, maxBudget, estimatedLeads });
-
-                if (!minBudget || !maxBudget || !estimatedLeads) {
-                    throw new Error('Could not extract budget information');
-                }
-
-                return {
-                    min: parseInt(minBudget.replace(/[^0-9]/g, '')),
-                    max: parseInt(maxBudget.replace(/[^0-9]/g, '')),
-                    leads: parseInt(estimatedLeads.match(/\d+/)[0])
-                };
-            });
-
-            logger.debug('Taking post-results screenshot');
-            await page.screenshot({ path: '/tmp/after-results.png' });
-
-            // Calculate cost per lead
-            const avgBudget = (budgetData.min + budgetData.max) / 2;
-            const costPerLead = Math.round(avgBudget / budgetData.leads);
-
-            // Format response
-            const response = {
-                success: true,
-                budget: {
-                    min: budgetData.min,
-                    max: budgetData.max,
-                    currency: 'USD',
-                    frequency: 'monthly'
-                },
-                leads: {
-                    requested: leadsPerMonth,
-                    estimated: budgetData.leads,
-                    costPerLead
-                },
-                location: {
-                    zipCode,
-                    available: true
-                },
-                industry
-            };
-
-            await context.close();
-            logger.info('Calculation completed successfully', { response });
-            res.json(response);
+                throw error;
+            }
 
         } catch (error) {
-            logger.error('Error extracting results', {
-                error: error.message,
-                stack: error.stack
-            });
-            
-            await page.screenshot({ path: '/tmp/error-state.png' });
-            const html = await page.content();
-            logger.debug('Page HTML at error', { html });
-            
+            clearTimeout(timeout);
             throw error;
         }
 
@@ -251,20 +286,10 @@ app.post('/calculate-budget', async (req, res) => {
             error: error.message,
             stack: error.stack
         });
-        
-        if (browser) {
-            try {
-                const context = await browser.newContext();
-                const page = await context.newPage();
-                await page.screenshot({ path: '/tmp/error-screenshot.png' });
-                await context.close();
-            } catch (e) {
-                logger.error('Failed to take error screenshot', {
-                    error: e.message
-                });
-            }
-        }
 
+        if (context) await context.close();
+        
+        // Return error response
         res.status(500).json({
             success: false,
             error: 'Failed to calculate budget. Please try again later.',
@@ -278,7 +303,8 @@ app.get('/health', (req, res) => {
     logger.info('Health check requested');
     res.json({ 
         status: 'ok',
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        browserStatus: browserPromise ? 'initialized' : 'not initialized'
     });
 });
 
