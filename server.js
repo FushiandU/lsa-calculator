@@ -90,6 +90,15 @@ process.on('SIGTERM', cleanup);
 process.on('SIGINT', cleanup);
 
 app.post('/calculate-budget', async (req, res) => {
+    // Check if we're in a serverless environment
+    if (process.env.VERCEL) {
+        return res.status(501).json({
+            success: false,
+            error: 'This API endpoint is not available in the serverless environment due to browser automation limitations. Please run the API locally for full functionality.',
+            message: 'The calculation feature requires a full server environment with browser capabilities.'
+        });
+    }
+
     const { zipCode, industry, leadsPerMonth } = req.body;
     
     logger.info('Received budget calculation request', {
@@ -304,7 +313,7 @@ app.get('/health', (req, res) => {
     res.json({ 
         status: 'ok',
         timestamp: new Date().toISOString(),
-        browserStatus: browserPromise ? 'initialized' : 'not initialized'
+        environment: process.env.NODE_ENV || 'development'
     });
 });
 

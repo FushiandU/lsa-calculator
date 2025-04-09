@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
-    "vercel-install": "npm install playwright && npx playwright install-deps && npx playwright install chromium",
+    "vercel-install": "npm install playwright && npx playwright install chromium --with-deps=false",
     "vercel-build": "npm run vercel-install"
   },
   "dependencies": {
